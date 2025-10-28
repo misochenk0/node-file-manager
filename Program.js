@@ -1,14 +1,16 @@
 import { argv, stdin } from 'node:process'
-import { EOL } from 'node:os';
+import { EOL, homedir } from 'node:os';
 
 export class Program {
     constructor() {
         this.user_name = ''
+        this.directory = homedir()
     }
     init() {
         this.getUserName()
         this.logUserName()
         this.initCLI()
+        this.logCurrentDirectory()
     }
     getUserName() {
         const args = argv.slice(2)
@@ -20,6 +22,9 @@ export class Program {
             this.user_name = 'Anonymous'
         }
     }
+    logCurrentDirectory() {
+        console.log(`You are currently in ${this.directory}${EOL}`)
+    }
     logUserName() {
         console.log(`Welcome to the File Manager, ${this.user_name}!${EOL}`)
     }
@@ -27,12 +32,18 @@ export class Program {
         console.log(`${EOL}Thank you for using File Manager, ${this.user_name}, goodbye!`)
         process.exit(0)
     }
+    invalidInput() {
+        console.log(`Invalid input${EOL}`)
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
             switch (input) {
                 case '.exit':
                     this.stop()
+                    break
+                default:
+                    this.invalidInput()
                     break
             }
         });
