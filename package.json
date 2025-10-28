@@ -9,6 +9,7 @@
     "type": "git",
     "url": "git+https://github.com/misochenk0/node-file-manager.git"
   },
+  "type": "module",
   "author": "misochenkoas@gmail.com",
   "license": "ISC",
   "bugs": {
