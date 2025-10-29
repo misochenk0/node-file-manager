@@ -129,33 +129,53 @@ export class Program {
         stream.on('error', () => console.error('Operation failed'));
         stream.on('end', () => console.log(''));
     }
+    isFileExist(name, callback, isExist = false) {
+        const failed = () => {
+            console.log(`Operation failed${EOL}`)
+            this.logCurrentDirectory()
+        }
+        fs.stat(name, (err, stats) => {
+            if (isExist) {
+                if (err) return failed()
+                callback()
+            } else {
+                if (err) return callback()
+                failed()
+            }
+        })
+    }
     addFile(fileName) {
         const path = this.getProperPath(fileName)
-        fs.stat(path, (err, stats) => {
-            if (err) {
-                fs.writeFile(path, '', (err) => {
-                    console.log(`File ${fileName} created ${EOL}`)
-                    this.logCurrentDirectory()
-                })
-            } else {
-                console.log(`Operation failed${EOL}`)
+        this.isFileExist(path, () => {
+            fs.writeFile(path, '', (err) => {
+                console.log(`File ${fileName} created ${EOL}`)
                 this.logCurrentDirectory()
-            }
+            })
         })
     }
     addDir(dirName) {
         const path = this.getProperPath(dirName)
-        fs.stat(path, (err, stats) => {
-            if (err) {
-                fs.mkdir(path, {}, (err) => {
-                    console.log(`Directory ${dirName} created ${EOL}`)
-                    this.logCurrentDirectory()
-                })
-            } else {
-                console.log(`Operation failed${EOL}`)
+        this.isFileExist(path, () => {
+            fs.mkdir(path, {}, (err) => {
+                console.log(`Directory ${dirName} created ${EOL}`)
                 this.logCurrentDirectory()
-            }
+            })
         })
+    }
+    renameFile(fileName, newFileName) {
+        const path = this.getProperPath(fileName)
+        const new_path = this.getProperPath(newFileName)
+        this.isFileExist(path, () => {
+            this.isFileExist(new_path, () => {
+                fs.rename(path, new_path, (err) => {
+                    if (err) {
+                        console.log(`Operation failed, ${EOL}`)
+                        this.logCurrentDirectory()
+                    }
+                    else console.log('File renamed successfully');
+                })
+            })
+        }, true)
     }
     initCLI() {
         stdin.on('data', (data) => {
@@ -183,6 +203,9 @@ export class Program {
                     break
                 case 'mkdir':
                     this.addDir(firstParam)
+                    break
+                case 'rn':
+                    this.renameFile(firstParam, secondParam)
                     break
                 default:
                     this.invalidInput()
