@@ -177,7 +177,7 @@ export class Program {
             })
         }, true)
     }
-    copyFile(fileName, copyFolder) {
+    copyFile(fileName, copyFolder, deleteInitial) {
         const path = this.getProperPath(fileName)
         const copy_path = this.getProperPath(copyFolder)
         this.isFileExist(path, () => {
@@ -190,7 +190,12 @@ export class Program {
                     stream.pipe(writeStream);
                     stream.on('error', () => console.error('Operation failed'));
                     stream.on('end', () => {
-                        console.log(`File copied successfully ${EOL}`);
+                        if (!deleteInitial) console.log(`File copied successfully ${EOL}`);
+                        if (deleteInitial) fs.unlink(path, (err) => {
+                            if (err) console.log(`Operation failed${EOL}`)
+                            console.log(`File moved successfully${EOL}`)
+                        })
+                        this.logCurrentDirectory()
                     });
                 })
             }, true)
@@ -228,6 +233,9 @@ export class Program {
                     break
                 case 'cp':
                     this.copyFile(firstParam, secondParam)
+                    break
+                case 'mv':
+                    this.copyFile(firstParam, secondParam, true)
                     break
                 default:
                     this.invalidInput()
