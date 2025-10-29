@@ -110,10 +110,25 @@ export class Program {
             })
         })
     }
+    checkFile(fileName) {
+        let file_name = fileName
+        let directory = `${this.directory}/`
+        if (file_name.startsWith('/')) directory = ''
+        if (file_name.startsWith('./')) file_name = file_name.replace('./', '')
+        if (file_name.startsWith('../')) {
+            directory = `${this.recursevlyGoUp(file_name)}/`
+            file_name = file_name.replaceAll('../', '')
+        }
+        const stream = fs.createReadStream(`${directory}${file_name}`)
+
+        stream.pipe(process.stdout);
+        stream.on('error', () => console.error('FS operation failed'));
+        stream.on('end', () => console.log(''));
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
-            const [command, params] = input.split(' ')
+            const [command, firstParam, secondParam] = input.split(' ')
             switch (command) {
                 case '.exit':
                     this.stop()
@@ -123,10 +138,13 @@ export class Program {
                     this.logCurrentDirectory()
                     break
                 case 'cd':
-                    this.changeDirectory(params)
+                    this.changeDirectory(firstParam)
                     break
                 case 'ls':
                     this.listItems()
+                    break
+                case 'cat':
+                    this.checkFile(firstParam)
                     break
                 default:
                     this.invalidInput()
