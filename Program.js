@@ -177,6 +177,25 @@ export class Program {
             })
         }, true)
     }
+    copyFile(fileName, copyFolder) {
+        const path = this.getProperPath(fileName)
+        const copy_path = this.getProperPath(copyFolder)
+        this.isFileExist(path, () => {
+            this.isFileExist(copy_path, () => {
+                const file_name = path.split('/').pop()
+                const new_path = `${copy_path}/${file_name}`
+                this.isFileExist(new_path, () => {
+                    const stream = fs.createReadStream(path)
+                    const writeStream = fs.createWriteStream(new_path)
+                    stream.pipe(writeStream);
+                    stream.on('error', () => console.error('Operation failed'));
+                    stream.on('end', () => {
+                        console.log(`File copied successfully ${EOL}`);
+                    });
+                })
+            }, true)
+        }, true)
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
@@ -206,6 +225,9 @@ export class Program {
                     break
                 case 'rn':
                     this.renameFile(firstParam, secondParam)
+                    break
+                case 'cp':
+                    this.copyFile(firstParam, secondParam)
                     break
                 default:
                     this.invalidInput()
