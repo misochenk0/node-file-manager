@@ -201,6 +201,15 @@ export class Program {
             }, true)
         }, true)
     }
+    removeFile(fileName) {
+        const path = this.getProperPath(fileName)
+        this.isFileExist(path, () => {
+            fs.unlink(path, (err) => {
+                if (err) console.log(`Operation failed${EOL}`)
+                console.log(`File deleted successfully${EOL}`)
+            })
+        }, true)
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
@@ -236,6 +245,9 @@ export class Program {
                     break
                 case 'mv':
                     this.copyFile(firstParam, secondParam, true)
+                    break
+                case 'rm':
+                    this.removeFile(firstParam)
                     break
                 default:
                     this.invalidInput()
