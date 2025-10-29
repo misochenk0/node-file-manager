@@ -143,6 +143,20 @@ export class Program {
             }
         })
     }
+    addDir(dirName) {
+        const path = this.getProperPath(dirName)
+        fs.stat(path, (err, stats) => {
+            if (err) {
+                fs.mkdir(path, {}, (err) => {
+                    console.log(`Directory ${dirName} created ${EOL}`)
+                    this.logCurrentDirectory()
+                })
+            } else {
+                console.log(`Operation failed${EOL}`)
+                this.logCurrentDirectory()
+            }
+        })
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
@@ -166,6 +180,9 @@ export class Program {
                     break
                 case 'add':
                     this.addFile(firstParam)
+                    break
+                case 'mkdir':
+                    this.addDir(firstParam)
                     break
                 default:
                     this.invalidInput()
