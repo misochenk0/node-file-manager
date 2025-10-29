@@ -110,7 +110,7 @@ export class Program {
             })
         })
     }
-    checkFile(fileName) {
+    getProperPath(fileName) {
         let file_name = fileName
         let directory = `${this.directory}/`
         if (file_name.startsWith('/')) directory = ''
@@ -119,11 +119,29 @@ export class Program {
             directory = `${this.recursevlyGoUp(file_name)}/`
             file_name = file_name.replaceAll('../', '')
         }
-        const stream = fs.createReadStream(`${directory}${file_name}`)
+        return `${directory}${file_name}`
+    }
+    checkFile(fileName) {
+        const path = this.getProperPath(fileName)
+        const stream = fs.createReadStream(path)
 
         stream.pipe(process.stdout);
-        stream.on('error', () => console.error('FS operation failed'));
+        stream.on('error', () => console.error('Operation failed'));
         stream.on('end', () => console.log(''));
+    }
+    addFile(fileName) {
+        const path = this.getProperPath(fileName)
+        fs.stat(path, (err, stats) => {
+            if (err) {
+                fs.writeFile(path, '', (err) => {
+                    console.log(`File ${fileName} created ${EOL}`)
+                    this.logCurrentDirectory()
+                })
+            } else {
+                console.log(`Operation failed${EOL}`)
+                this.logCurrentDirectory()
+            }
+        })
     }
     initCLI() {
         stdin.on('data', (data) => {
@@ -145,6 +163,9 @@ export class Program {
                     break
                 case 'cat':
                     this.checkFile(firstParam)
+                    break
+                case 'add':
+                    this.addFile(firstParam)
                     break
                 default:
                     this.invalidInput()
