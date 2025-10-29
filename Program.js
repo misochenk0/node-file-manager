@@ -89,6 +89,27 @@ export class Program {
             })
         })
     }
+    getFileStat(name) {
+        return new Promise((resolve, reject) => {
+            fs.stat(`${this.directory}/${name}`, (err, stats) => {
+                resolve({
+                    Name: name,
+                    Type: stats.isDirectory() ? 'directory' : 'file'
+                })
+            })
+        })
+    }
+    listItems() {
+        fs.readdir(this.directory, (err, files) => {
+            Promise.all(files.map(file => this.getFileStat(file))).then(files => {
+                const result = files.sort((a, b) => {
+                    if (a.Type !== b.Type) return a.Type === 'directory' ? -1 : 1;
+                    return a.Name.localeCompare(b.Name, undefined, { sensitivity: 'base' });
+                })
+                console.table(result)
+            })
+        })
+    }
     initCLI() {
         stdin.on('data', (data) => {
             const input = data.toString().trim();
@@ -103,6 +124,9 @@ export class Program {
                     break
                 case 'cd':
                     this.changeDirectory(params)
+                    break
+                case 'ls':
+                    this.listItems()
                     break
                 default:
                     this.invalidInput()
