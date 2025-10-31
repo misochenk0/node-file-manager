@@ -26,6 +26,10 @@ export class Program {
             this.user_name = 'Anonymous'
         }
     }
+    operationFailed() {
+        console.log(`Operation failed${EOL}`)
+        this.logCurrentDirectory()
+    }
     logCurrentDirectory() {
         console.log(`You are currently in ${this.directory}${EOL}`)
     }
@@ -38,6 +42,7 @@ export class Program {
     }
     invalidInput() {
         console.log(`Invalid input${EOL}`)
+        this.logCurrentDirectory()
     }
     goUp() {
         this.directory = this.directory.split('/').slice(0, -1).join('/') || '/'
@@ -50,6 +55,7 @@ export class Program {
         return result
     }
     changeDirectory(path) {
+        if (!path) return this.invalidInput()
         let checked_path = path
         this.checked_directory = ''
         let relative_directory = this.directory === '/' ? '' : this.directory
@@ -71,7 +77,7 @@ export class Program {
             this.directory = `${relative_directory}${this.checked_directory}`
             this.logCurrentDirectory()
         }).catch((err) => {
-            this.invalidInput()
+            this.operationFailed()
         })
     }
     // TODO CHECK AT WINDOWS?
@@ -109,12 +115,14 @@ export class Program {
                     return a.Name.localeCompare(b.Name, undefined, { sensitivity: 'base' });
                 })
                 console.table(result)
+                this.logCurrentDirectory()
             })
         })
     }
     getProperPath(fileName) {
         let file_name = fileName
         let directory = `${this.directory}/`
+        if (file_name === '.') file_name = ''
         if (file_name.startsWith('/')) directory = ''
         if (file_name.startsWith('./')) file_name = file_name.replace('./', '')
         if (file_name.startsWith('../')) {
@@ -124,29 +132,31 @@ export class Program {
         return `${directory}${file_name}`
     }
     checkFile(fileName) {
+        if (!fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const stream = fs.createReadStream(path)
 
         stream.pipe(process.stdout);
-        stream.on('error', () => console.error('Operation failed'));
-        stream.on('end', () => console.log(''));
+        stream.on('error', () => this.operationFailed());
+        stream.on('end', () => this.logCurrentDirectory());
     }
-    isFileExist(name, callback, isExist = false) {
-        const failed = () => {
-            console.log(`Operation failed${EOL}`)
-            this.logCurrentDirectory()
+    isFileExist(name, callback, isExist = false, errorCallback) {
+        const error = stats => {
+            if (errorCallback) return errorCallback(stats)
+            this.operationFailed()
         }
         fs.stat(name, (err, stats) => {
             if (isExist) {
-                if (err) return failed()
-                callback()
+                if (err) return error(stats)
+                callback(stats)
             } else {
-                if (err) return callback()
-                failed()
+                if (err) return callback(stats)
+                error(stats)
             }
         })
     }
     addFile(fileName) {
+        if (!fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         this.isFileExist(path, () => {
             fs.writeFile(path, '', (err) => {
@@ -156,6 +166,7 @@ export class Program {
         })
     }
     addDir(dirName) {
+        if (!dirName) return this.invalidInput()
         const path = this.getProperPath(dirName)
         this.isFileExist(path, () => {
             fs.mkdir(path, {}, (err) => {
@@ -165,6 +176,7 @@ export class Program {
         })
     }
     renameFile(fileName, newFileName) {
+        if (!newFileName || !fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const new_path = this.getProperPath(newFileName)
         this.isFileExist(path, () => {
@@ -179,27 +191,46 @@ export class Program {
             })
         }, true)
     }
+    copyRecursevely(copy_from, copy_to, deleteInitial = false) {
+        const copyFile = resultPath => {
+            const stream = fs.createReadStream(copy_from)
+            const writeStream = fs.createWriteStream(resultPath)
+            stream.pipe(writeStream);
+            stream.on('error', () => this.operationFailed());
+            writeStream.on('error', () => this.operationFailed());
+            stream.on('end', () => {
+                if (!deleteInitial) {
+                    console.log(`File copied successfully ${EOL}`)
+                    this.logCurrentDirectory()
+                }
+                if (deleteInitial) fs.unlink(copy_from, (err) => {
+                    if (err) return this.operationFailed()
+                    console.log(`File moved successfully${EOL}`)
+                    this.logCurrentDirectory()
+                })
+            });
+        }
+        this.isFileExist(copy_to, () => copyFile(copy_to), false, stats => {
+            if (deleteInitial) return this.operationFailed()
+            if (stats && stats.isFile()) {
+                const copy_path = copy_to.split('.')
+                const extension = copy_path.pop()
+                const new_path = `${copy_path.join('.')}(copy).${extension}`
+                this.copyRecursevely(copy_from, new_path, deleteInitial)
+            } else {
+                this.operationFailed()
+            }
+        })
+    }
     copyFile(fileName, copyFolder, deleteInitial) {
+        if (!fileName || !copyFolder) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const copy_path = this.getProperPath(copyFolder)
         this.isFileExist(path, () => {
             this.isFileExist(copy_path, () => {
                 const file_name = path.split('/').pop()
                 const new_path = `${copy_path}/${file_name}`
-                this.isFileExist(new_path, () => {
-                    const stream = fs.createReadStream(path)
-                    const writeStream = fs.createWriteStream(new_path)
-                    stream.pipe(writeStream);
-                    stream.on('error', () => console.error('Operation failed'));
-                    stream.on('end', () => {
-                        if (!deleteInitial) console.log(`File copied successfully ${EOL}`);
-                        if (deleteInitial) fs.unlink(path, (err) => {
-                            if (err) console.log(`Operation failed${EOL}`)
-                            console.log(`File moved successfully${EOL}`)
-                        })
-                        this.logCurrentDirectory()
-                    });
-                })
+                this.copyRecursevely(path, new_path, deleteInitial)
             }, true)
         }, true)
     }
@@ -207,6 +238,7 @@ export class Program {
         switch (parm) {
             case '--EOL':
                 console.log(JSON.stringify(EOL))
+                this.logCurrentDirectory()
                 break
             case '--cpus':
                 const pc_cpus = cpus()
@@ -214,15 +246,20 @@ export class Program {
                 pc_cpus.forEach((cpu, index) => {
                     console.log(`${index + 1}. Model: ${cpu.model}, Speed: ${cpu.speed / 1000} GHz`)
                 })
+                console.log(EOL)
+                this.logCurrentDirectory()
                 break
             case '--homedir':
                 console.log(homedir(), EOL)
+                this.logCurrentDirectory()
                 break
             case '--username':
                 console.log(userInfo().username, EOL)
+                this.logCurrentDirectory()
                 break
             case '--architecture':
                 console.log(process.arch)
+                this.logCurrentDirectory()
                 break
             default:
                 this.invalidInput()
@@ -230,54 +267,66 @@ export class Program {
         }
     }
     removeFile(fileName) {
+        if (!fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         this.isFileExist(path, () => {
             fs.unlink(path, (err) => {
-                if (err) console.log(`Operation failed${EOL}`)
+                if (err) return this.operationFailed()
                 console.log(`File deleted successfully${EOL}`)
+                this.logCurrentDirectory()
             })
         }, true)
     }
     logFileHash(fileName) {
+        if (!fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         this.isFileExist(path, () => {
             const stream  = fs.createReadStream(path)
             const hash = crypto.createHash('sha256')
             stream.on('data', chunk => hash.update(chunk))
-            stream.on('error', () => console.error('Operation failed'))
+            stream.on('error', () => this.operationFailed())
             stream.on('end', () => {
                 console.log(hash.digest('hex'))
+                this.logCurrentDirectory()
             })
         }, true)
     }
     compressFile(fileName, folderName) {
-        if (!folderName) return this.invalidInput()
+        if (!folderName || !fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const folder_path = this.getProperPath(folderName)
         this.isFileExist(path, () => {
             this.isFileExist(folder_path, () => {
-                const file_name = `${folder_path}/${path.split('/').pop()}.br`
+                const file_name = `${folder_path}${path.split('/').pop()}.br`
                 const read_stream = fs.createReadStream(path)
                 const write_stream = fs.createWriteStream(file_name)
                 const compress = zlib.createBrotliCompress()
+                read_stream.on('error', () => this.operationFailed())
+                write_stream.on('error', () => this.operationFailed())
+                compress.on('error', () => this.operationFailed())
                 read_stream.pipe(compress).pipe(write_stream)
                 console.log(`File ${fileName} compressed into ${file_name} successfully${EOL}`)
+                this.logCurrentDirectory()
             }, true)
         }, true)
     }
     deCompressFile(fileName, folderName) {
-        if (!folderName) return this.invalidInput()
+        if (!fileName || !folderName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const folder_path = this.getProperPath(folderName)
         this.isFileExist(path, () => {
             this.isFileExist(folder_path, () => {
                 const file_name = path.split('/').pop().replace('.br', '')
                 const read_stream = fs.createReadStream(path)
-                const decompres_path = `${folder_path}/${file_name}`
+                const decompres_path = `${folder_path}${file_name}`
                 const write_stream = fs.createWriteStream(decompres_path)
                 const decompress = zlib.createBrotliDecompress()
+                decompress.on('error', () => this.operationFailed())
+                read_stream.on('error', () => this.operationFailed())
+                write_stream.on('error', () => this.operationFailed())
                 read_stream.pipe(decompress).pipe(write_stream)
                 console.log(`File ${fileName} decompressed into ${decompres_path} successfully${EOL}`)
+                this.logCurrentDirectory()
             }, true)
         }, true)
     }
