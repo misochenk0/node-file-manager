@@ -1,6 +1,8 @@
 import { argv, stdin } from 'node:process'
-import { EOL, homedir } from 'node:os';
+import { EOL, homedir, cpus, userInfo } from 'node:os';
 import fs from 'node:fs'
+import crypto from 'node:crypto'
+import zlib from 'node:zlib'
 
 export class Program {
     constructor() {
@@ -201,6 +203,32 @@ export class Program {
             }, true)
         }, true)
     }
+    logOsInfo(parm) {
+        switch (parm) {
+            case '--EOL':
+                console.log(JSON.stringify(EOL))
+                break
+            case '--cpus':
+                const pc_cpus = cpus()
+                console.log(`Total amount of CPUs: ${pc_cpus.length} ${EOL}`)
+                pc_cpus.forEach((cpu, index) => {
+                    console.log(`${index + 1}. Model: ${cpu.model}, Speed: ${cpu.speed / 1000} GHz`)
+                })
+                break
+            case '--homedir':
+                console.log(homedir(), EOL)
+                break
+            case '--username':
+                console.log(userInfo().username, EOL)
+                break
+            case '--architecture':
+                console.log(process.arch)
+                break
+            default:
+                this.invalidInput()
+                break
+        }
+    }
     removeFile(fileName) {
         const path = this.getProperPath(fileName)
         this.isFileExist(path, () => {
@@ -208,6 +236,49 @@ export class Program {
                 if (err) console.log(`Operation failed${EOL}`)
                 console.log(`File deleted successfully${EOL}`)
             })
+        }, true)
+    }
+    logFileHash(fileName) {
+        const path = this.getProperPath(fileName)
+        this.isFileExist(path, () => {
+            const stream  = fs.createReadStream(path)
+            const hash = crypto.createHash('sha256')
+            stream.on('data', chunk => hash.update(chunk))
+            stream.on('error', () => console.error('Operation failed'))
+            stream.on('end', () => {
+                console.log(hash.digest('hex'))
+            })
+        }, true)
+    }
+    compressFile(fileName, folderName) {
+        if (!folderName) return this.invalidInput()
+        const path = this.getProperPath(fileName)
+        const folder_path = this.getProperPath(folderName)
+        this.isFileExist(path, () => {
+            this.isFileExist(folder_path, () => {
+                const file_name = `${folder_path}/${path.split('/').pop()}.br`
+                const read_stream = fs.createReadStream(path)
+                const write_stream = fs.createWriteStream(file_name)
+                const compress = zlib.createBrotliCompress()
+                read_stream.pipe(compress).pipe(write_stream)
+                console.log(`File ${fileName} compressed into ${file_name} successfully${EOL}`)
+            }, true)
+        }, true)
+    }
+    deCompressFile(fileName, folderName) {
+        if (!folderName) return this.invalidInput()
+        const path = this.getProperPath(fileName)
+        const folder_path = this.getProperPath(folderName)
+        this.isFileExist(path, () => {
+            this.isFileExist(folder_path, () => {
+                const file_name = path.split('/').pop().replace('.br', '')
+                const read_stream = fs.createReadStream(path)
+                const decompres_path = `${folder_path}/${file_name}`
+                const write_stream = fs.createWriteStream(decompres_path)
+                const decompress = zlib.createBrotliDecompress()
+                read_stream.pipe(decompress).pipe(write_stream)
+                console.log(`File ${fileName} decompressed into ${decompres_path} successfully${EOL}`)
+            }, true)
         }, true)
     }
     initCLI() {
@@ -248,6 +319,18 @@ export class Program {
                     break
                 case 'rm':
                     this.removeFile(firstParam)
+                    break
+                case 'os':
+                    this.logOsInfo(firstParam)
+                    break
+                case 'hash':
+                    this.logFileHash(firstParam)
+                    break
+                case 'compress':
+                    this.compressFile(firstParam, secondParam)
+                    break
+                case 'decompress':
+                    this.deCompressFile(firstParam, secondParam)
                     break
                 default:
                     this.invalidInput()
