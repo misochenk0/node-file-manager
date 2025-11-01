@@ -3,12 +3,15 @@ import { EOL, homedir, cpus, userInfo } from 'node:os';
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import zlib from 'node:zlib'
+import { dir } from 'node:console';
 
 export class Program {
     constructor() {
         this.user_name = ''
         this.directory = homedir()
         this.checked_directory = ''
+        this.directory_divider = this.directory.includes('\\') ? "\\" : '/'
+        this.root_level = this.directory.split(this.directory_divider)[0] || this.directory_divider
     }
     init() {
         this.getUserName()
@@ -45,12 +48,18 @@ export class Program {
         this.logCurrentDirectory()
     }
     goUp() {
-        this.directory = this.directory.split('/').slice(0, -1).join('/') || '/'
+        const [root_path] = this.directory.split(this.directory_divider)
+        const new_path = this.directory.split(this.directory_divider).slice(0, -1).join(this.directory_divider)
+        if (!new_path || new_path === root_path) {
+            this.directory = `${root_path}${this.directory_divider}`
+            return
+        }
+        this.directory = new_path
     }
-    recursevlyGoUp(path, parent_path = this.directory) {
+    recursevlyGoUp(path, parent_path = this.directory, divider = this.directory_divider) {
         let result = parent_path
-        if (path.startsWith('../')) {
-            return this.recursevlyGoUp(path.replace('../', ''), parent_path.split('/').slice(0, -1).join('/'))
+        if (path.startsWith(`..${divider}`)) {
+            return this.recursevlyGoUp(path.replace(`..${divider}`, ''), parent_path.split(divider).slice(0, -1).join(divider), divider)
         }
         return result
     }
@@ -58,51 +67,54 @@ export class Program {
         if (!path) return this.invalidInput()
         let checked_path = path
         this.checked_directory = ''
-        let relative_directory = this.directory === '/' ? '' : this.directory
-        if (path.startsWith('/')) {
-            relative_directory = ''
+        let relative_directory = this.directory === this.root_level ? '' : this.directory
+        const user_divider = path.includes('\\') ? "\\" : '/'
+        if (path.startsWith(this.root_level) || path.startsWith(user_divider) ) {
+            relative_directory = this.root_level
         }
-        if (path.startsWith('../')) {
-            relative_directory = this.recursevlyGoUp(path)
-            checked_path = checked_path.replaceAll('../', '')
-            const up_occurrences = path.match(/\.\.\//g);
+        if (path.startsWith(`..${user_divider}`)) {
+            relative_directory = this.recursevlyGoUp(path, this.directory.replaceAll(this.directory_divider, user_divider), user_divider)
+            checked_path = checked_path.replaceAll(`..${user_divider}`, '')
+            const up_occurrences = path.match(new RegExp(`\\.\\.\\${user_divider}`, 'g')) || [];
             if (!checked_path) {
                 up_occurrences.forEach(() => this.goUp())
                 this.logCurrentDirectory()
                 return
             }
         }
-        if (path.startsWith('./')) checked_path = checked_path.replace('./', '')
-        this.checkDirectory(checked_path, relative_directory).then(() => {
-            this.directory = `${relative_directory}${this.checked_directory}`
+        if (path.startsWith(`.${user_divider}`)) checked_path = checked_path.replace(`..${user_divider}`, '')
+        relative_directory = relative_directory.replaceAll(this.directory_divider, user_divider)
+        this.checkDirectory(checked_path, relative_directory, user_divider).then(() => {
+            this.directory = `${relative_directory}${this.checked_directory}`.replaceAll(user_divider, this.directory_divider)
             this.logCurrentDirectory()
         }).catch((err) => {
             this.operationFailed()
         })
     }
     // TODO CHECK AT WINDOWS?
-    checkDirectory(directory, relative_directory, resolveMethod, rejectMethod) {
-        const entities = directory.split('/').filter(Boolean)
+    checkDirectory(directory, relative_directory, divider, resolveMethod, rejectMethod) {
+        const entities = directory.split(divider).filter(Boolean)
         const [first_entity] = entities || []
         if (!directory.replaceAll('.', '')) return rejectMethod ? rejectMethod() : Promise.reject()
         return new Promise((resolve, reject) => {
             const root_resolve = resolveMethod || resolve
             const root_reject = rejectMethod || reject
-            const path = [relative_directory, this.checked_directory, first_entity].filter(Boolean).join('/')
-            fs.stat(path.startsWith('/') ? path : `/${path}`, (err, stats) => {
+            const path = `${[relative_directory, this.checked_directory, first_entity].filter(Boolean).join(divider)}${divider}`
+            fs.stat(path.startsWith(this.root_level) ? path : `${this.root_level}${divider}${path}`, (err, stats) => {
                 if (err || !stats || !stats?.isDirectory()) root_reject(err)
-                this.checked_directory += `/${first_entity}`
-                if (entities.length === 1) root_resolve()
-                else this.checkDirectory(entities.slice(1).join('/'), relative_directory, root_resolve, root_reject)
+                this.checked_directory += !this.checked_directory && relative_directory.endsWith(divider) ? first_entity || '' : `${divider}${first_entity || ''}`
+                
+                if (entities.length <= 1) root_resolve()
+                else this.checkDirectory(entities.slice(1).join(divider), relative_directory, divider, root_resolve, root_reject)
             })
         })
     }
     getFileStat(name) {
         return new Promise((resolve, reject) => {
-            fs.stat(`${this.directory}/${name}`, (err, stats) => {
+            fs.stat(`${this.directory}${this.directory_divider}${name}`, (err, stats) => {
                 resolve({
                     Name: name,
-                    Type: stats.isDirectory() ? 'directory' : 'file'
+                    Type: stats?.isDirectory() ? 'directory' : 'file'
                 })
             })
         })
@@ -121,13 +133,14 @@ export class Program {
     }
     getProperPath(fileName) {
         let file_name = fileName
-        let directory = `${this.directory}/`
+        const user_divider = file_name.includes('\\') ? "\\" : '/'
+        let directory = `${this.directory.replaceAll(this.directory_divider, user_divider)}${user_divider}`;
         if (file_name === '.') file_name = ''
-        if (file_name.startsWith('/')) directory = ''
-        if (file_name.startsWith('./')) file_name = file_name.replace('./', '')
-        if (file_name.startsWith('../')) {
-            directory = `${this.recursevlyGoUp(file_name)}/`
-            file_name = file_name.replaceAll('../', '')
+        if (file_name.startsWith(user_divider)) directory = ''
+        if (file_name.startsWith(`.${user_divider}`)) file_name = file_name.replace(`.${user_divider}`, '')
+        if (file_name.startsWith(`..${user_divider}`)) {
+            directory = `${this.recursevlyGoUp(file_name, this.directory.replaceAll(this.directory_divider, user_divider), user_divider)}${user_divider}`
+            file_name = file_name.replaceAll(`..${user_divider}`, '')
         }
         return `${directory}${file_name}`
     }
@@ -226,10 +239,11 @@ export class Program {
         if (!fileName || !copyFolder) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const copy_path = this.getProperPath(copyFolder)
+        const user_divider = fileName.includes('\\') ? "\\" : '/'
         this.isFileExist(path, () => {
             this.isFileExist(copy_path, () => {
-                const file_name = path.split('/').pop()
-                const new_path = `${copy_path}/${file_name}`
+                const file_name = path.split(user_divider).pop()
+                const new_path = `${copy_path.endsWith(user_divider) ? copy_path : copy_path + user_divider}${file_name}`
                 this.copyRecursevely(path, new_path, deleteInitial)
             }, true)
         }, true)
@@ -242,6 +256,7 @@ export class Program {
                 break
             case '--cpus':
                 const pc_cpus = cpus()
+                con
                 console.log(`Total amount of CPUs: ${pc_cpus.length} ${EOL}`)
                 pc_cpus.forEach((cpu, index) => {
                     console.log(`${index + 1}. Model: ${cpu.model}, Speed: ${cpu.speed / 1000} GHz`)
@@ -295,18 +310,23 @@ export class Program {
         if (!folderName || !fileName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const folder_path = this.getProperPath(folderName)
+        const user_divider = fileName.includes('\\') ? "\\" : '/'
         this.isFileExist(path, () => {
             this.isFileExist(folder_path, () => {
-                const file_name = `${folder_path}${path.split('/').pop()}.br`
+                const file_name = `${folder_path}${path.split(user_divider).pop()}.br`
                 const read_stream = fs.createReadStream(path)
                 const write_stream = fs.createWriteStream(file_name)
                 const compress = zlib.createBrotliCompress()
-                read_stream.on('error', () => this.operationFailed())
-                write_stream.on('error', () => this.operationFailed())
-                compress.on('error', () => this.operationFailed())
+                let has_error = false
+                read_stream.on('error', () => { has_error = true; this.operationFailed() })
+                write_stream.on('error', () => { has_error = true; this.operationFailed() })
+                compress.on('error', () => { has_error = true; this.operationFailed() })
                 read_stream.pipe(compress).pipe(write_stream)
-                console.log(`File ${fileName} compressed into ${file_name} successfully${EOL}`)
-                this.logCurrentDirectory()
+                compress.on('finish', () => {
+                    if (has_error) return
+                    console.log(`File ${fileName} compressed into ${file_name} successfully${EOL}`)
+                    this.logCurrentDirectory()
+                })
             }, true)
         }, true)
     }
@@ -314,19 +334,24 @@ export class Program {
         if (!fileName || !folderName) return this.invalidInput()
         const path = this.getProperPath(fileName)
         const folder_path = this.getProperPath(folderName)
+        const user_divider = fileName.includes('\\') ? "\\" : '/'
         this.isFileExist(path, () => {
             this.isFileExist(folder_path, () => {
-                const file_name = path.split('/').pop().replace('.br', '')
+                const file_name = path.split(user_divider).pop().replace('.br', '')
                 const read_stream = fs.createReadStream(path)
                 const decompres_path = `${folder_path}${file_name}`
                 const write_stream = fs.createWriteStream(decompres_path)
                 const decompress = zlib.createBrotliDecompress()
-                decompress.on('error', () => this.operationFailed())
-                read_stream.on('error', () => this.operationFailed())
-                write_stream.on('error', () => this.operationFailed())
+                let has_error = false
+                read_stream.on('error', () => { has_error = true; this.operationFailed() })
+                write_stream.on('error', () => { has_error = true; this.operationFailed() })
+                decompress.on('error', () => { has_error = true; this.operationFailed() })
                 read_stream.pipe(decompress).pipe(write_stream)
-                console.log(`File ${fileName} decompressed into ${decompres_path} successfully${EOL}`)
-                this.logCurrentDirectory()
+                decompress.on('finish', () => {
+                    if (has_error) return
+                    console.log(`File ${fileName} decompressed into ${decompres_path} successfully${EOL}`)
+                    this.logCurrentDirectory()
+                })
             }, true)
         }, true)
     }
